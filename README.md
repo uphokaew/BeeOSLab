@@ -88,8 +88,9 @@ make clean
 
 ### 🙋‍♂️ ผู้พัฒนา
 
-```text
 [uphokaew](https://github.com/uphokaew/)
+
+```text
 Hobbyist & Learner in Low-Level Programming
 ```
 
