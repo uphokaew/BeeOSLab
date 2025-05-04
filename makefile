@@ -48,7 +48,7 @@ $(IMG): $(BOOT_BIN) $(KERNEL_BIN)
 	dd if=$(BOOT_BIN) of=$@ conv=notrunc
 
 	# คัดลอก kernel ลงใน root ของ image
-	mcopy -i $@ $(KERNEL_BIN) "::kernel.bin"
+	mcopy -i $@ $(KERNEL_BIN) "::/kernel.bin"
 
 	@echo "Floppy image created: $@"
 
