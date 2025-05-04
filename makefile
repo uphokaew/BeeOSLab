@@ -1,44 +1,56 @@
 ASM = nasm
 QEMU = qemu-system-x86_64
 BUILD_DIR = build
-BOOTLOADER_DIR = bootloader
-KERNEL_DIR = kernal
+BOOTLOADER = bootloader/main.asm
+KERNEL = kernel/main.asm
 IMG = $(BUILD_DIR)/main.img
-IMG_SIZE = 2880      # จำนวน sectors (512 * 2880 = 1.44MB)
+BOOT_BIN = $(BUILD_DIR)/bootloader.bin
+KERNEL_BIN = $(BUILD_DIR)/kernel.bin
+IMG_SIZE = 1440k
 ASMFLAGS = -f bin
 QEMUFLAGS = -fda
 
 .PHONY: all clean run check-tools
 
-all: check-tools $(IMG)
+all: check-tools floppy_image
 
 check-tools:
 	@which $(ASM) >/dev/null || { echo "Error: $(ASM) not found"; exit 1; }
+	@which truncate >/dev/null || { echo "Error: truncate not found"; exit 1; }
+	@which mkfs.fat >/dev/null || { echo "Error: mkfs.fat not found (try installing dosfstools)"; exit 1; }
+	@which mcopy >/dev/null || { echo "Error: mcopy not found (try installing mtools)"; exit 1; }
 	@which $(QEMU) >/dev/null || { echo "Error: $(QEMU) not found"; exit 1; }
-	@which dd >/dev/null || { echo "Error: dd not found"; exit 1; }
 
 $(BUILD_DIR):
-	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $@
 
-# Compile Bootloader
-$(BUILD_DIR)/bootloader.bin: $(BOOTLOADER_DIR)/main.asm | $(BUILD_DIR)
+$(BOOT_BIN): $(BOOTLOADER) | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
-	@echo "Compiled bootloader -> $@"
+	@echo "Built bootloader -> $@"
 
-# Compile Kernel
-$(BUILD_DIR)/kernel.bin: $(KERNEL_DIR)/main.asm | $(BUILD_DIR)
+$(KERNEL_BIN): $(KERNEL) | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
-	@echo "Compiled kernel -> $@"
+	@echo "Built kernel -> $@"
 
-# Create 1.44MB floppy image with bootloader + kernel
-$(IMG): $(BUILD_DIR)/bootloader.bin $(BUILD_DIR)/kernel.bin
-	@dd if=/dev/zero of=$(IMG) bs=512 count=$(IMG_SIZE) status=none
-	@dd if=$(BUILD_DIR)/bootloader.bin of=$(IMG) conv=notrunc status=none
-	@dd if=$(BUILD_DIR)/kernel.bin of=$(IMG) bs=512 seek=1 conv=notrunc status=none
-	@echo "Created floppy image: $(IMG)"
+floppy_image: $(IMG)
+
+$(IMG): $(BOOT_BIN) $(KERNEL_BIN)
+	# สร้าง image เปล่าขนาด 1.44MB
+	dd if=/dev/zero of=$@ bs=512 count=2880
+
+	# ฟอร์แมต FAT12 และตั้งชื่อ volume
+	mkfs.fat -F 12 -n "JAZZOS" $@
+
+	# เขียน bootloader ลง sector แรก
+	dd if=$(BOOT_BIN) of=$@ conv=notrunc
+
+	# คัดลอก kernel ลงใน root ของ image
+	mcopy -i $@ $(KERNEL_BIN) "::kernel.bin"
+
+	@echo "Floppy image created: $@"
 
 run: $(IMG)
-	$(QEMU) $(QEMUFLAGS) $(IMG)
+	$(QEMU) $(QEMUFLAGS) $<
 
 clean:
 	@rm -rf $(BUILD_DIR)
